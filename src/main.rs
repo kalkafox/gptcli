@@ -1,10 +1,17 @@
 use std::{io::stdout, path::{self, Path}};
 
+use syntect::easy::HighlightLines;
+use syntect::parsing::SyntaxSet;
+use syntect::highlighting::{ThemeSet, Style as HStyle};
+use syntect::util::{as_24_bit_terminal_escaped, LinesWithEndings};
+
+use console::Style;
 use crossterm::{
     cursor::{self, MoveLeft},
-    execute, ExecutableCommand,
+    execute, ExecutableCommand, style::Stylize,
 };
 use directories::ProjectDirs;
+use regex::Regex;
 use rustyline::{error::ReadlineError, DefaultEditor};
 use serde::{Deserialize, Serialize};
 use tokio::main;
@@ -38,8 +45,13 @@ struct Usage {
     total_tokens: u32,
 }
 
+const RAINBOW_SPEED: f32 = 15.0;
+
 #[main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let re = Regex::new(r#"```(?P<language>\w+)(?:\r?\n|\r)(?P<code>[\s\S]*?)\r?\n```"#)?;
+    let ps = SyntaxSet::load_defaults_newlines();
+    let ts = ThemeSet::load_defaults();
 
     let mut dire: path::PathBuf = Path::new(".").to_path_buf();
 
@@ -76,7 +88,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut messages: Vec<Message> = vec![];
 
     loop {
-        let readline = rl.readline("You: ");
+        let readline = rl.readline(format!("{}: ", "You".stylize().dark_cyan().bold()).as_str());
         match readline {
             Ok(line) => {
                 if line.is_empty() {
@@ -86,22 +98,40 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!();
 
                 rl.add_history_entry(line.as_str())?;
-                let task = tokio::spawn(async move {
+                let task = tokio::spawn({
                     let frames = vec![
                         "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏", "⠋", "⠙", "⠚", "⠒", "⠂",
                         "⠂", "⠒", "⠲", "⠴", "⠦", "⠖", "⠒", "⠐", "⠐", "⠒", "⠓", "⠋",
                     ];
+                    async move {
 
                     loop {
-                        for frame in frames.iter() {
+                        for (i, frame) in frames.iter().enumerate() {
                             // Disable cursor
                             execute!(stdout(), cursor::Hide).unwrap();
-                            print!("{}", frame);
-                            execute!(stdout(), cursor::MoveLeft(1)).unwrap();
+
+                            // Simulate a rainbow color effect by changing the color of the frame
+
+                            let r = ((i as f32 * RAINBOW_SPEED) % 255.0) / 255.0;
+                            let g = ((i as f32 * RAINBOW_SPEED + 85.0) % 255.0) / 255.0;
+                            let b = ((i as f32 * RAINBOW_SPEED + 170.0) % 255.0) / 255.0;
+
+                            let color_style = crossterm::style::Color::Rgb {
+                                r: (r * 255.0) as u8,
+                                g: (g * 255.0) as u8,
+                                b: (b * 255.0) as u8,
+                            };
+
+                            // Print the frame
+                            print!("{} ", frame.stylize().stylize().with(color_style));
+
+
+
+                            execute!(stdout(), cursor::MoveLeft(2)).unwrap();
                             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
                         }
                     }
-                });
+                }});
 
                 // message_history.push(format!("{}: {}",
                 // //"",
@@ -127,6 +157,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 let chat_completion: ChatCompletion = openai_res.json().await?;
 
+                task.abort();
+
                 let choice = &chat_completion.choices[0];
                 let message = &choice.message;
 
@@ -139,17 +171,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     content: message.content.clone(),
                 });
 
-                task.abort();
+                let pretty_string = highlight_message(&message.content, &ps, &ts, &re);
 
                 // Enable cursor
                 execute!(stdout(), cursor::Show).unwrap();
                 execute!(stdout(), cursor::MoveLeft(2)).unwrap();
 
-                println!("{}: {}\n", "GPT-3", message.content);
+                println!("{}: {}\n", "GPT-3".stylize().dark_green().bold(), pretty_string);
 
             }
             Err(ReadlineError::Interrupted) => {
-                println!("Bye-bye!");
+                println!();
+                println!("Buh-bye!");
                 break;
             }
             Err(ReadlineError::Eof) => {
@@ -166,4 +199,42 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     rl.save_history("history.txt");
 
     Ok(())
+}
+
+
+fn highlight_message(
+    message: &String,
+    ps: &syntect::parsing::SyntaxSet,
+    ts: &syntect::highlighting::ThemeSet,
+    re: &Regex,
+) -> String {
+    let mut message_mut = message.clone();
+
+    for cap in re.captures_iter(message.as_str()) {
+
+        message_mut = message.replace(format!("```{}", &cap["language"]).as_str(), "");
+
+        let syntax = ps.find_syntax_by_token(&cap["language"]);
+        if syntax.is_none() {
+            continue;
+        }
+
+        let syntax = syntax.unwrap();
+
+        let mut h = HighlightLines::new(syntax, &ts.themes["base16-ocean.dark"]);
+
+        let mut code: Vec<String> = vec![]; 
+        for line in LinesWithEndings::from(&cap["code"]) {
+            let ranges: Vec<(HStyle, &str)> = h.highlight_line(line, &ps).unwrap();
+            let mut escaped = as_24_bit_terminal_escaped(&ranges[..], false);
+            escaped.push_str("\x1b[0m");
+            code.push(escaped);
+        }
+
+        let stylized_code = code.join("\x1b[0m");
+
+        message_mut = message_mut.replace(&cap["code"], &stylized_code);
+    }
+
+    message_mut.replace("```", "")
 }
