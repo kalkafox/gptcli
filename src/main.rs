@@ -89,15 +89,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         enable_raw_mode()?;
     }
 
-    // set color mode
-
     let mut messages: Vec<Message> = vec![];
 
     loop {
-        let readline = rl.readline(format!("{}: ", "You".stylize().dark_cyan().bold()).as_str());
+        let readline = rl.readline(">> ");
         match readline {
             Ok(line) => {
                 if line.is_empty() {
+                    execute!(stdout(), cursor::MoveUp(1)).unwrap();
                     continue;
                 }
 
