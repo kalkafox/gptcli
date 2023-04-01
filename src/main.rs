@@ -8,7 +8,7 @@ use syntect::util::{as_24_bit_terminal_escaped, LinesWithEndings};
 use console::Style;
 use crossterm::{
     cursor::{self, MoveLeft},
-    execute, ExecutableCommand, style::Stylize,
+    execute, ExecutableCommand, style::Stylize, terminal::enable_raw_mode,
 };
 use directories::ProjectDirs;
 use regex::Regex;
@@ -80,9 +80,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     headers.append("Content-Type", "application/json".parse()?);
 
     let mut rl = DefaultEditor::new()?;
-    #[cfg(feature = "with-file-history")]
-    if rl.load_history("history.txt").is_err() {
-        println!("No previous history.");
+    #[cfg(windows)]
+    {
+        rl.set_color_mode(rustyline::ColorMode::Forced);
+        enable_raw_mode()?;
     }
 
     let mut messages: Vec<Message> = vec![];
@@ -195,8 +196,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     }
-    #[cfg(feature = "with-file-history")]
-    rl.save_history("history.txt");
 
     Ok(())
 }
