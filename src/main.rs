@@ -49,38 +49,61 @@ const RAINBOW_SPEED: f32 = 15.0;
 
 #[main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let re = Regex::new(r#"```(?P<language>\w+)(?:\r?\n|\r)(?P<code>[\s\S]*?)\r?\n```"#)?;
+    let code_re = Regex::new(r#"```(?P<language>\w+)(?:\r?\n|\r)(?P<code>[\s\S]*?)\r?\n```"#)?;
+    let tiny_code_re = Regex::new(r#"`(?P<tinycode>[^`]+)`"#)?;
+
     let ps = SyntaxSet::load_defaults_newlines();
     let ts = ThemeSet::load_defaults();
 
-    let mut dire: path::PathBuf = Path::new(".").to_path_buf();
+    let client = reqwest::Client::new();
+    let mut headers = reqwest::header::HeaderMap::new();
+    headers.append("Content-Type", "application/json".parse()?);
 
+    let mut config_dir: path::PathBuf = Path::new(".").to_path_buf();
     if let Some(proj_dirs) = ProjectDirs::from("dev", "kalkafox", "gpt-cli") {
         let dir = proj_dirs.config_dir();
-        dire = dir.to_path_buf();
-        if !dir.exists() {
-            tokio::fs::create_dir_all(dir).await?;
+        config_dir = dir.to_path_buf();
+        tokio::fs::create_dir_all(dir).await?;
+    }
+
+    if !config_dir.join("openai.key").exists() {
+        loop {
+            let openai_key = rpassword::prompt_password("Please enter your OpenAI API key: ")?;
+
+            if openai_key.is_empty() {
+                // Move cursor up
+                execute!(stdout(), cursor::MoveUp(1))?;
+                continue;
+            }
+
+            headers.append("Authorization", format!("Bearer {}", openai_key).parse()?);
+
+            let res = client
+                .get("https://api.openai.com/v1/models")
+                .headers(headers.clone())
+                .send()
+                .await?;
+
+            if res.status() != 200 {
+                println!("Invalid OpenAI API key");
+                headers.remove("Authorization");
+                continue;
+            }
+
+            tokio::fs::write(config_dir.join("openai.key"), openai_key.clone()).await?;
+
+            println!(
+                "OpenAI key has been stored in {}. Delete it if you wish.",
+                config_dir.join("openai.key").display()
+            );
+
+            break;
         }
+    } else {
+        let openai_key = tokio::fs::read_to_string(config_dir.join("openai.key")).await?;
+
+        headers.append("Authorization", format!("Bearer {}", openai_key).parse()?);
     }
-
-    if !dire.join("openai.key").exists() {
-        let openai_key = rpassword::prompt_password("Please enter your OpenAI API key: ")?;
-
-        tokio::fs::write(dire.join("openai.key"), openai_key.clone()).await?;
-
-        println!(
-            "OpenAI key has been stored in {}. Delete it if you wish.",
-            dire.join("openai.key").display()
-        );
-    }
-
-    let openai_key = tokio::fs::read_to_string(dire.join("openai.key")).await?;
-
-    let client = reqwest::Client::new();
-
-    let mut headers = reqwest::header::HeaderMap::new();
-    headers.append("Authorization", format!("Bearer {}", openai_key).parse()?);
-    headers.append("Content-Type", "application/json".parse()?);
 
     let mut rl = Editor::<(), _>::new()?;
     #[cfg(windows)]
@@ -96,7 +119,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         match readline {
             Ok(line) => {
                 if line.is_empty() {
-                    execute!(stdout(), cursor::MoveUp(1)).unwrap();
+                    execute!(stdout(), cursor::MoveUp(1))?;
                     continue;
                 }
 
@@ -174,7 +197,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     content: message.content.clone(),
                 });
 
-                let pretty_string = highlight_message(&message.content, &ps, &ts, &re);
+                let pretty_string = highlight_message(&message.content, &ps, &ts, &code_re, &tiny_code_re);
 
                 // Enable cursor
                 execute!(stdout(), cursor::Show).unwrap();
@@ -202,6 +225,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    #[cfg(windows)]
+    disable_raw_mode()?;
+
     Ok(())
 }
 
@@ -209,11 +235,12 @@ fn highlight_message(
     message: &String,
     ps: &syntect::parsing::SyntaxSet,
     ts: &syntect::highlighting::ThemeSet,
-    re: &Regex,
+    code_re: &Regex,
+    tiny_code_re: &Regex,
 ) -> String {
     let mut message_mut = message.clone();
 
-    for cap in re.captures_iter(message.as_str()) {
+    for cap in code_re.captures_iter(message.as_str()) {
         message_mut = message.replace(format!("```{}", &cap["language"]).as_str(), "");
 
         let syntax = ps.find_syntax_by_token(&cap["language"]);
@@ -223,7 +250,7 @@ fn highlight_message(
 
         let syntax = syntax.unwrap();
 
-        let mut h = HighlightLines::new(syntax, &ts.themes["base16-ocean.dark"]);
+        let mut h = HighlightLines::new(syntax, &ts.themes["base16-mocha.dark"]);
 
         let mut code: Vec<String> = vec![];
         for line in LinesWithEndings::from(&cap["code"]) {
@@ -238,5 +265,13 @@ fn highlight_message(
         message_mut = message_mut.replace(&cap["code"], &stylized_code);
     }
 
-    message_mut.replace("```", "")
+    message_mut = message_mut.replace("```", "");
+
+    
+    for cap in tiny_code_re.captures_iter(message_mut.clone().as_str()) {
+        let bold = &cap["tinycode"].stylize().grey().italic().bold().to_string();
+        message_mut = message_mut.replace(format!("`{}`", &cap["tinycode"]).as_str(), bold);
+    }
+
+    message_mut
 }
