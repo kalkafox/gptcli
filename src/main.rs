@@ -1,14 +1,18 @@
+mod spinners;
+
 use std::{
     io::stdout,
-    path::{self, Path},
+    path::{self, Path}, collections::HashMap, ops::Add,
 };
 
+use rand::seq::{IteratorRandom, SliceRandom};
+use spinners::{get_spinners, Spinner};
 use syntect::easy::HighlightLines;
 use syntect::highlighting::{Style as HStyle, ThemeSet};
 use syntect::parsing::SyntaxSet;
 use syntect::util::{as_24_bit_terminal_escaped, LinesWithEndings};
 
-use crossterm::{cursor, execute, style::Stylize, terminal::enable_raw_mode};
+use crossterm::{cursor, execute, style::{Stylize, Color}, terminal::enable_raw_mode};
 
 use directories::ProjectDirs;
 use regex::Regex;
@@ -49,6 +53,8 @@ const RAINBOW_SPEED: f32 = 15.0;
 
 #[main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let spinners = get_spinners().await?;
+
     let code_re = Regex::new(r#"```(?P<language>\w+)(?:\r?\n|\r)(?P<code>[\s\S]*?)\r?\n```"#)?;
     let tiny_code_re = Regex::new(r#"`(?P<tinycode>[^`]+)`"#)?;
 
@@ -114,6 +120,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut messages: Vec<Message> = vec![];
 
+    // Prompt (will be put into a config later)
+    // TODO: toml config
+    messages.push(Message {
+        role: "user".to_string(),
+        content: "Please wrap any generated code in a Markdown code block.".to_string(),
+    });
+
+    let spinner_values = spinners.values().collect::<Vec<&Spinner>>();
+
     loop {
         let readline = rl.readline(">> ");
         match readline {
@@ -125,39 +140,56 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 println!();
 
-                rl.add_history_entry(line.as_str())?;
-                let task = tokio::spawn({
-                    let frames = vec![
-                        "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏", "⠋", "⠙", "⠚", "⠒", "⠂",
-                        "⠂", "⠒", "⠲", "⠴", "⠦", "⠖", "⠒", "⠐", "⠐", "⠒", "⠓", "⠋",
-                    ];
+                // Get a random spinner
+                let spinner = spinner_values.choose(&mut rand::thread_rng()).unwrap();
+                let spinner_frames = spinner.frames.clone();
+                let spinner_interval = spinner.interval;
+
+
+                let rainbow_task = tokio::spawn(
+                    async move {
+
+                        let mut i = 0;
+
+                        loop {
+
+                            let r = (i as f32 / RAINBOW_SPEED).sin().powi(2);
+                            let g = (i as f32 / RAINBOW_SPEED + 2.0 * std::f32::consts::PI / 3.0).sin().powi(2);
+                            let b = (i as f32 / RAINBOW_SPEED + 4.0 * std::f32::consts::PI / 3.0).sin().powi(2);
+
+                            let color_style = Color::Rgb {
+                                r: (r * 255.0) as u8,
+                                g: (g * 255.0) as u8,
+                                b: (b * 255.0) as u8,
+                            };
+
+                            // Colorize the current line
+                            execute!(stdout(), crossterm::style::SetForegroundColor(color_style)).unwrap();
+
+                            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+
+                            i = i + 1;
+                        }
+                    }
+                );
+
+                let spin_task = tokio::spawn(
                     async move {
                         loop {
-                            for (i, frame) in frames.iter().enumerate() {
+                            for frame in spinner_frames.iter() {
                                 // Disable cursor
                                 execute!(stdout(), cursor::Hide).unwrap();
 
-                                // Simulate a rainbow color effect by changing the color of the frame
-
-                                let r = ((i as f32 * RAINBOW_SPEED) % 255.0) / 255.0;
-                                let g = ((i as f32 * RAINBOW_SPEED + 85.0) % 255.0) / 255.0;
-                                let b = ((i as f32 * RAINBOW_SPEED + 170.0) % 255.0) / 255.0;
-
-                                let color_style = crossterm::style::Color::Rgb {
-                                    r: (r * 255.0) as u8,
-                                    g: (g * 255.0) as u8,
-                                    b: (b * 255.0) as u8,
-                                };
-
                                 // Print the frame
-                                print!("{} ", frame.stylize().stylize().with(color_style));
+                                print!("{} ", frame);
 
-                                execute!(stdout(), cursor::MoveLeft(2)).unwrap();
-                                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                                // Move to the very beginning of the line
+                                execute!(stdout(), cursor::MoveToColumn(0)).unwrap();
+                                tokio::time::sleep(std::time::Duration::from_millis(spinner_interval.into())).await;
                             }
                         }
                     }
-                });
+                );
 
                 // message_history.push(format!("{}: {}",
                 // //"",
@@ -183,7 +215,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 let chat_completion = openai_res.json::<ChatCompletion>().await?;
 
-                task.abort();
+                rainbow_task.abort();
+                spin_task.abort();
 
                 let choice = &chat_completion.choices[0];
                 let message = &choice.message;
@@ -241,9 +274,18 @@ fn highlight_message(
     let mut message_mut = message.clone();
 
     for cap in code_re.captures_iter(message.as_str()) {
-        message_mut = message.replace(format!("```{}", &cap["language"]).as_str(), "");
+        //message_mut = message.replace(format!("```{}", &cap["language"]).as_str(), "");
 
-        let syntax = ps.find_syntax_by_token(&cap["language"]);
+        let mut language = &cap["language"];
+
+        match &cap["language"] {
+            "typescript" => language = "ts",
+            "javascript" => language = "js",
+
+            _ => {}
+        }
+
+        let syntax = ps.find_syntax_by_token(language);
         if syntax.is_none() {
             continue;
         }
@@ -268,10 +310,10 @@ fn highlight_message(
     message_mut = message_mut.replace("```", "");
 
     
-    for cap in tiny_code_re.captures_iter(message_mut.clone().as_str()) {
-        let bold = &cap["tinycode"].stylize().grey().italic().bold().to_string();
-        message_mut = message_mut.replace(format!("`{}`", &cap["tinycode"]).as_str(), bold);
-    }
+    // for cap in tiny_code_re.captures_iter(message_mut.clone().as_str()) {
+    //     let bold = &cap["tinycode"].stylize().grey().italic().bold().to_string();
+    //     message_mut = message_mut.replace(format!("`{}`", &cap["tinycode"]).as_str(), bold);
+    // }
 
     message_mut
 }
