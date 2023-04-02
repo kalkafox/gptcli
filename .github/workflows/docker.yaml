@@ -26,9 +26,7 @@ jobs:
         with:
           images: ${{ secrets.DOCKER_USERNAME }}/${{ github.event.repository.name }}
       - name: Build
-        run: |
-          apk add --no-cache build-base pkgconfig openssl-dev
-          cargo build --release
+        run: cargo build --release
       - name: Cache target directory
         uses: actions/cache@v3.3.1
         with:
