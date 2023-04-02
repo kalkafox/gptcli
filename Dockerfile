@@ -1,4 +1,4 @@
-FROM kalka/docker-cargo
+FROM kalka/docker-cargo:main
 
 RUN apk add --no-cache build-base pkgconfig openssl-dev
 
