@@ -256,6 +256,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     "GPT-3".stylize().dark_green().bold(),
                     pretty_string
                 );
+
+                execute!(stdout(), crossterm::style::SetForegroundColor(Color::Reset)).unwrap();
             }
             Err(ReadlineError::Interrupted) => {
                 println!();
