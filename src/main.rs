@@ -1,8 +1,10 @@
 mod spinners;
 
 use std::{
+    collections::HashMap,
     io::stdout,
-    path::{self, Path}, collections::HashMap, ops::Add,
+    ops::Add,
+    path::{self, Path},
 };
 
 use rand::seq::{IteratorRandom, SliceRandom};
@@ -12,7 +14,11 @@ use syntect::highlighting::{Style as HStyle, ThemeSet};
 use syntect::parsing::SyntaxSet;
 use syntect::util::{as_24_bit_terminal_escaped, LinesWithEndings};
 
-use crossterm::{cursor, execute, style::{Stylize, Color}, terminal::enable_raw_mode};
+use crossterm::{
+    cursor, execute,
+    style::{Color, Stylize},
+    terminal::{disable_raw_mode, enable_raw_mode},
+};
 
 use directories::ProjectDirs;
 use regex::Regex;
@@ -145,51 +151,52 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let spinner_frames = spinner.frames.clone();
                 let spinner_interval = spinner.interval;
 
+                let rainbow_task = tokio::spawn(async move {
+                    let mut i = 0;
 
-                let rainbow_task = tokio::spawn(
-                    async move {
+                    loop {
+                        let r = (i as f32 / RAINBOW_SPEED).sin().powi(2);
+                        let g = (i as f32 / RAINBOW_SPEED + 2.0 * std::f32::consts::PI / 3.0)
+                            .sin()
+                            .powi(2);
+                        let b = (i as f32 / RAINBOW_SPEED + 4.0 * std::f32::consts::PI / 3.0)
+                            .sin()
+                            .powi(2);
 
-                        let mut i = 0;
+                        let color_style = Color::Rgb {
+                            r: (r * 255.0) as u8,
+                            g: (g * 255.0) as u8,
+                            b: (b * 255.0) as u8,
+                        };
 
-                        loop {
+                        // Colorize the current line
+                        execute!(stdout(), crossterm::style::SetForegroundColor(color_style))
+                            .unwrap();
 
-                            let r = (i as f32 / RAINBOW_SPEED).sin().powi(2);
-                            let g = (i as f32 / RAINBOW_SPEED + 2.0 * std::f32::consts::PI / 3.0).sin().powi(2);
-                            let b = (i as f32 / RAINBOW_SPEED + 4.0 * std::f32::consts::PI / 3.0).sin().powi(2);
+                        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
 
-                            let color_style = Color::Rgb {
-                                r: (r * 255.0) as u8,
-                                g: (g * 255.0) as u8,
-                                b: (b * 255.0) as u8,
-                            };
+                        i = i + 1;
+                    }
+                });
 
-                            // Colorize the current line
-                            execute!(stdout(), crossterm::style::SetForegroundColor(color_style)).unwrap();
+                let spin_task = tokio::spawn(async move {
+                    loop {
+                        for frame in spinner_frames.iter() {
+                            // Disable cursor
+                            execute!(stdout(), cursor::Hide).unwrap();
 
-                            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                            // Print the frame
+                            print!("{} ", frame);
 
-                            i = i + 1;
+                            // Move to the very beginning of the line
+                            execute!(stdout(), cursor::MoveToColumn(0)).unwrap();
+                            tokio::time::sleep(std::time::Duration::from_millis(
+                                spinner_interval.into(),
+                            ))
+                            .await;
                         }
                     }
-                );
-
-                let spin_task = tokio::spawn(
-                    async move {
-                        loop {
-                            for frame in spinner_frames.iter() {
-                                // Disable cursor
-                                execute!(stdout(), cursor::Hide).unwrap();
-
-                                // Print the frame
-                                print!("{} ", frame);
-
-                                // Move to the very beginning of the line
-                                execute!(stdout(), cursor::MoveToColumn(0)).unwrap();
-                                tokio::time::sleep(std::time::Duration::from_millis(spinner_interval.into())).await;
-                            }
-                        }
-                    }
-                );
+                });
 
                 // message_history.push(format!("{}: {}",
                 // //"",
@@ -230,7 +237,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     content: message.content.clone(),
                 });
 
-                let pretty_string = highlight_message(&message.content, &ps, &ts, &code_re, &tiny_code_re);
+                let pretty_string =
+                    highlight_message(&message.content, &ps, &ts, &code_re, &tiny_code_re);
 
                 // Enable cursor
                 execute!(stdout(), cursor::Show).unwrap();
@@ -309,7 +317,6 @@ fn highlight_message(
 
     message_mut = message_mut.replace("```", "");
 
-    
     // for cap in tiny_code_re.captures_iter(message_mut.clone().as_str()) {
     //     let bold = &cap["tinycode"].stylize().grey().italic().bold().to_string();
     //     message_mut = message_mut.replace(format!("`{}`", &cap["tinycode"]).as_str(), bold);

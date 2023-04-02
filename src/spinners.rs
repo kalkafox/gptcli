@@ -1,6 +1,5 @@
-use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
-
+use std::collections::HashMap;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Spinner {
@@ -16,9 +15,11 @@ pub struct Spinners {
 }
 
 pub async fn get_spinners() -> Result<HashMap<String, Spinner>, Box<dyn std::error::Error>> {
-    let spinner_res = reqwest::get("https://raw.githubusercontent.com/sindresorhus/cli-spinners/master/spinners.json").await?;
+    let spinner_res = reqwest::get(
+        "https://raw.githubusercontent.com/sindresorhus/cli-spinners/master/spinners.json",
+    )
+    .await?;
     let spinners: Spinners = spinner_res.json().await?;
 
     Ok(spinners.spinners)
 }
-
