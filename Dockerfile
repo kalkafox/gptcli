@@ -1,10 +1,6 @@
-FROM alpine
+FROM kalka:docker-cargo
 
-RUN apk add --no-cache curl build-base pkgconfig openssl-dev
-
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-
-ENV PATH="/root/.cargo/bin:${PATH}"
+RUN apk add --no-cache build-base pkgconfig openssl-dev
 
 WORKDIR /build
 
@@ -16,7 +12,7 @@ RUN cargo build --release --target x86_64-unknown-linux-musl
 
 FROM alpine
 
-RUN apk add --no-cache ca-certificates libgcc
+RUN apk add --no-cache libgcc
 
 COPY --from=0 /build/target/x86_64-unknown-linux-musl/release/gptcli /usr/local/bin/gptcli
 
