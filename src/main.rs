@@ -169,9 +169,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             b: (b * 255.0) as u8,
                         };
 
+                        // Get current cursor position
+                        let (x, y) = cursor::position().unwrap();
+
                         // Colorize the current line
+                        execute!(stdout(), cursor::MoveToColumn(0)).unwrap();
                         execute!(stdout(), crossterm::style::SetForegroundColor(color_style))
                             .unwrap();
+
+                        // Move cursor back to the original position
+                        execute!(stdout(), cursor::MoveTo(x, y)).unwrap();
 
                         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
 
