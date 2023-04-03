@@ -67,6 +67,7 @@ jobs:
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')
         with:
+          token: ${{ secrets.RELEASE_SECRET }}
           files: |
             target/release/gptcli
           tag_name: ${{ github.ref }}
@@ -87,6 +88,7 @@ jobs:
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')
         with:
+          token: ${{ secrets.RELEASE_SECRET }}
           files: |
             target/release/gptcli
           tag_name: ${{ github.ref }}
@@ -107,6 +109,7 @@ jobs:
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')
         with:
+          token: ${{ secrets.RELEASE_SECRET }}
           files: |
             target/release/gptcli.exe
           tag_name: ${{ github.ref }}
