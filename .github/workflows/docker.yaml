@@ -32,6 +32,7 @@ jobs:
           images: ${{ secrets.DOCKER_USERNAME }}/${{ github.event.repository.name }}
       - name: Build
         run: |
+          sudo apt update && sudo apt install musl-tools musl-dev -y
           rustup target add x86_64-unknown-linux-musl
           cargo build --release --target x86_64-unknown-linux-musl
       - name: Push Docker image
