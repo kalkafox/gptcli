@@ -32,8 +32,7 @@ jobs:
       - name: Build
         run: |
           sudo apt update && sudo apt install -y libssl-dev musl-dev musl-tools pkg-config
-          rustup target add x86_64-unknown-linux-musl
-          cargo build --release --target x86_64-unknown-linux-musl
+          cargo build --release
       - name: Push Docker image
         uses: docker/build-push-action@v4
         with:
