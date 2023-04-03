@@ -43,19 +43,20 @@ jobs:
           key: ${{ runner.os }}-openssl-3.1.0
 
       - name: Build OpenSSL
-        if: '! test -d /musl'
         run: |
-          sudo apt update && sudo apt install -y musl-dev musl-tools pkg-config linux-headers-$(uname -r)
+          if ![ -d "/musl" ]; then
+            sudo apt update && sudo apt install -y musl-dev musl-tools pkg-config linux-headers-$(uname -r)
 
-          sudo ln -s /usr/include/x86_64-linux-gnu/asm /usr/include/x86_64-linux-musl/asm && ln -s /usr/include/asm-generic /usr/include/x86_64-linux-musl/asm-generic && ln -s /usr/include/linux /usr/include/x86_64-linux-musl/linux
+            sudo ln -s /usr/include/x86_64-linux-gnu/asm /usr/include/x86_64-linux-musl/asm && ln -s /usr/include/asm-generic /usr/include/x86_64-linux-musl/asm-generic && ln -s /usr/include/linux /usr/include/x86_64-linux-musl/linux
 
-          wget https://github.com/openssl/openssl/releases/download/openssl-3.1.0/openssl-3.1.0.tar.gz
-          tar -xzf openssl-3.1.0.tar.gz
-          cd openssl-3.1.0
-          CC="musl-gcc -fPIE -pie -static -idirafter /usr/include/ -idirafter /usr/include/x86_64-linux-gnu/" ./Configure linux-x86_64 --prefix=/usr --openssldir=/usr/lib/ssl --libdir=lib/x86_64-linux-musl
-          make depend
-          make -j$(nproc)
-          sudo make install
+            wget https://github.com/openssl/openssl/releases/download/openssl-3.1.0/openssl-3.1.0.tar.gz
+            tar -xzf openssl-3.1.0.tar.gz
+            cd openssl-3.1.0
+            CC="musl-gcc -fPIE -pie -static -idirafter /usr/include/ -idirafter /usr/include/x86_64-linux-gnu/" ./Configure linux-x86_64 --prefix=/usr --openssldir=/usr/lib/ssl --libdir=lib/x86_64-linux-musl
+            make depend
+            make -j$(nproc)
+            sudo make install
+          fi
       - name: Build
         run: |
           sudo apt update && sudo apt install -y musl-dev musl-tools pkg-config
