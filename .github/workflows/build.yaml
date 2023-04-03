@@ -15,19 +15,11 @@ env:
 jobs:
   build-release:
     runs-on: ubuntu-latest
-    outputs:
-      upload_url: ${{ steps.build-release.outputs.upload_url }}
+
     steps:
       - name: Create release
         id: build-release
-        uses: actions/create-release@v1
-        with:
-          draft: false
-          prerelease: false
-          release_name: ${{ github.ref }}
-          tag_name: ${{ github.ref }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_SECRET }}
+        uses: shogo82148/actions-create-release@v1
 
   build-docker:
     runs-on: ubuntu-latest
@@ -82,11 +74,11 @@ jobs:
         run: |
           cargo build --release
       - name: Upload artifact
-        uses: actions/upload-release-asset@v1
+        uses: shogo82148/actions-upload-release-asset@v1
         with:
           upload_url: ${{ needs.build-release.outputs.upload_url }}
           asset_path: ./target/release/gptcli
-          asset_name: gptcli-linux
+          asset_name: gptcli-linux-${{ matrix.arch }}
           asset_content_type: application/octet-stream
 
   build-macos:
@@ -100,11 +92,11 @@ jobs:
         run: |
           cargo build --release
       - name: Upload artifact
-        uses: actions/upload-release-asset@v1
+        uses: shogo82148/actions-upload-release-asset@v1
         with:
           upload_url: ${{ needs.build-release.outputs.upload_url }}
           asset_path: ./target/release/gptcli
-          asset_name: gptcli-macos
+          asset_name: gptcli-macos-${{ matrix.arch }}
           asset_content_type: application/octet-stream
 
   build-windows:
@@ -118,9 +110,9 @@ jobs:
         run: |
           cargo build --release
       - name: Upload artifact
-        uses: actions/upload-release-asset@v1
+        uses: shogo82148/actions-upload-release-asset@v1
         with:
           upload_url: ${{ needs.build-release.outputs.upload_url }}
           asset_path: ./target/release/gptcli.exe
-          asset_name: gptcli-windows.exe
+          asset_name: gptcli-windows-${{ matrix.arch }}.exe
           asset_content_type: application/octet-stream
