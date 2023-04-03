@@ -84,7 +84,7 @@ jobs:
         with:
           upload_url: ${{ needs.build-release.outputs.upload_url }}
           asset_path: ./target/release/gptcli
-          asset_name: gptcli-linux-${{ matrix.arch }}
+          asset_name: gptcli-linux-x86_64
           asset_content_type: application/octet-stream
 
   build-macos:
@@ -103,7 +103,7 @@ jobs:
         with:
           upload_url: ${{ needs.build-release.outputs.upload_url }}
           asset_path: ./target/release/gptcli
-          asset_name: gptcli-macos-${{ matrix.arch }}
+          asset_name: gptcli-macos-arm64
           asset_content_type: application/octet-stream
 
   build-windows:
@@ -122,5 +122,5 @@ jobs:
         with:
           upload_url: ${{ needs.build-release.outputs.upload_url }}
           asset_path: ./target/release/gptcli.exe
-          asset_name: gptcli-windows-${{ matrix.arch }}.exe
+          asset_name: gptcli-windows-x86_64.exe
           asset_content_type: application/octet-stream
