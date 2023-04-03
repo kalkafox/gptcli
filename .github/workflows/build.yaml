@@ -15,9 +15,12 @@ env:
 jobs:
   build-release:
     runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.build-release.outputs.upload_url }}
 
     steps:
       - name: Create release
+        if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
         id: build-release
         uses: shogo82148/actions-create-release@v1
         with:
