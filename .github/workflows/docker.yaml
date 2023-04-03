@@ -10,10 +10,6 @@ on:
 env:
   CARGO_TERM_COLOR: always
   PKG_CONFIG_ALLOW_CROSS: 1
-  OPENSSL_STATIC: 1
-  OPENSSL_DIR: /musl
-  OPENSSL_INCLUDE_DIR: /musl/include/openssl
-  OPENSSL_LIB_DIR: /musl/lib
 
 jobs:
   build:
@@ -34,32 +30,8 @@ jobs:
         uses: docker/metadata-action@v4.3.0
         with:
           images: ${{ secrets.DOCKER_USERNAME }}/${{ github.event.repository.name }}
-
-      - name: Cache OpenSSL
-        uses: actions/cache@v3
-        with:
-          # Cache the openssl-3.1.0 within the build directory
-          path: /musl
-          key: ${{ runner.os }}-openssl-3.1.0
-
-      - name: Build OpenSSL
-        run: |
-          if [ ! -d "/musl" ]; then
-            sudo apt update && sudo apt install -y musl-dev musl-tools
-
-            sudo ln -s /usr/include/x86_64-linux-gnu/asm /usr/include/x86_64-linux-musl/asm && sudo ln -s /usr/include/asm-generic /usr/include/x86_64-linux-musl/asm-generic && sudo ln -s /usr/include/linux /usr/include/x86_64-linux-musl/linux
-
-            wget https://github.com/openssl/openssl/releases/download/openssl-3.1.0/openssl-3.1.0.tar.gz
-            tar -xzf openssl-3.1.0.tar.gz
-            cd openssl-3.1.0
-            CC="musl-gcc -fPIE -pie -static -idirafter /usr/include/ -idirafter /usr/include/x86_64-linux-gnu/" ./Configure linux-x86_64 --prefix=/usr --openssldir=/usr/lib/ssl --libdir=lib/x86_64-linux-musl
-            make depend
-            make -j$(nproc)
-            sudo make install
-          fi
       - name: Build
         run: |
-          sudo apt update && sudo apt install -y musl-dev musl-tools pkg-config
           rustup target add x86_64-unknown-linux-musl
           cargo build --release --target x86_64-unknown-linux-musl
       - name: Push Docker image
