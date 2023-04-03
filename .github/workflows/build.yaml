@@ -20,6 +20,8 @@ jobs:
       - name: Create release
         id: build-release
         uses: shogo82148/actions-create-release@v1
+        with:
+          github_token: ${{ secrets.RELEASE_SECRET }}
 
   build-docker:
     runs-on: ubuntu-latest
