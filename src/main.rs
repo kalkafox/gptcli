@@ -1,10 +1,11 @@
+mod config;
 mod spinners;
 
 use std::{
     collections::HashMap,
     io::stdout,
     ops::Add,
-    path::{self, Path},
+    path::{self, Path}, sync::{Arc, Mutex},
 };
 
 use rand::seq::{IteratorRandom, SliceRandom};
@@ -55,14 +56,12 @@ struct Usage {
     total_tokens: u32,
 }
 
-const RAINBOW_SPEED: f32 = 15.0;
-
 #[main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let spinners = get_spinners().await?;
-
     let code_re = Regex::new(r#"```(?P<language>\w+)(?:\r?\n|\r)(?P<code>[\s\S]*?)\r?\n```"#)?;
     let tiny_code_re = Regex::new(r#"`(?P<tinycode>[^`]+)`"#)?;
+
+    let args = std::env::args().collect::<Vec<String>>();
 
     let ps = SyntaxSet::load_defaults_newlines();
     let ts = ThemeSet::load_defaults();
@@ -78,9 +77,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tokio::fs::create_dir_all(dir).await?;
     }
 
+    let mut config = {
+        if !config_dir.join("config.toml").exists() {
+            let config = config::create_config(config_dir.to_str().unwrap()).await?;
+            tokio::fs::write(config_dir.join("config.toml"), toml::to_string(&config)?).await?;
+            config
+        } else {
+            toml::from_str(&tokio::fs::read_to_string(config_dir.join("config.toml")).await?)?
+        }
+    };
+
+    if !config_dir.join("spinners.json").exists() {
+        let spinners = get_spinners().await?;
+        tokio::fs::write(
+            config_dir.join("spinners.json"),
+            serde_json::to_string(&spinners)?,
+        )
+        .await?;
+    }
+
+    let spinners: HashMap<String, Spinner> =
+        serde_json::from_str(&tokio::fs::read_to_string(config_dir.join("spinners.json")).await?)?;
+
     if !config_dir.join("openai.key").exists() {
         loop {
-            let openai_key = rpassword::prompt_password("Please enter your OpenAI API key: ")?;
+            let openai_key = dialoguer::Password::new()
+                .with_prompt("Enter your OpenAI API key")
+                .interact()?;
 
             if openai_key.is_empty() {
                 // Move cursor up
@@ -100,6 +123,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("Invalid OpenAI API key");
                 headers.remove("Authorization");
                 continue;
+            }
+
+            if !config.app.notify_save {
+                break;
+            }
+
+            let save_confirm = dialoguer::Confirm::new()
+                .with_prompt("Save OpenAI API key?")
+                .interact()?;
+
+            if !save_confirm {
+                let save_confirm = dialoguer::Confirm::new()
+                    .with_prompt(format!(
+                        "Ask again next time? (you can change this in {}/config.toml)",
+                        config_dir.display()
+                    ))
+                    .interact()?;
+                if !save_confirm {
+                    break;
+                }
+
+                config.app.notify_save = false;
+
+                break;
             }
 
             tokio::fs::write(config_dir.join("openai.key"), openai_key.clone()).await?;
@@ -126,11 +173,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut messages: Vec<Message> = vec![];
 
-    // Prompt (will be put into a config later)
-    // TODO: toml config
     messages.push(Message {
         role: "user".to_string(),
-        content: "Please wrap any generated code in a Markdown code block.".to_string(),
+        content: config.app.prompt.clone(),
     });
 
     let spinner_values = spinners.values().collect::<Vec<&Spinner>>();
@@ -144,6 +189,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     continue;
                 }
 
+                execute!(stdout(), cursor::Hide).unwrap();
+
                 println!();
 
                 // Get a random spinner
@@ -151,15 +198,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let spinner_frames = spinner.frames.clone();
                 let spinner_interval = spinner.interval;
 
+                let spinner_frame = Arc::new(Mutex::new(spinner_frames[0].clone()));
+                let spinner_frame_c = spinner_frame.clone();
+
                 let rainbow_task = tokio::spawn(async move {
                     let mut i = 0;
+                    let now = std::time::Instant::now();
 
                     loop {
-                        let r = (i as f32 / RAINBOW_SPEED).sin().powi(2);
-                        let g = (i as f32 / RAINBOW_SPEED + 2.0 * std::f32::consts::PI / 3.0)
+                        let r = (i as f32 / config.app.rainbow_speed).sin().powi(2);
+                        let g = (i as f32 / config.app.rainbow_speed
+                            + 2.0 * std::f32::consts::PI / 3.0)
                             .sin()
                             .powi(2);
-                        let b = (i as f32 / RAINBOW_SPEED + 4.0 * std::f32::consts::PI / 3.0)
+                        let b = (i as f32 / config.app.rainbow_speed
+                            + 4.0 * std::f32::consts::PI / 3.0)
                             .sin()
                             .powi(2);
 
@@ -169,18 +222,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             b: (b * 255.0) as u8,
                         };
 
-                        // Get current cursor position
-                        let (x, y) = cursor::position().unwrap();
-
                         // Colorize the current line
                         execute!(stdout(), cursor::MoveToColumn(0)).unwrap();
                         execute!(stdout(), crossterm::style::SetForegroundColor(color_style))
                             .unwrap();
 
-                        // Move cursor back to the original position
-                        execute!(stdout(), cursor::MoveTo(x, y)).unwrap();
+                        print!("{} ({:.2}ms)", *spinner_frame.lock().unwrap(), now.elapsed().as_secs_f32());
 
-                        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                        tokio::time::sleep(std::time::Duration::from_millis(config.app.rainbow_delay)).await;
 
                         i = i + 1;
                     }
@@ -188,15 +237,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 let spin_task = tokio::spawn(async move {
                     loop {
-                        for frame in spinner_frames.iter() {
-                            // Disable cursor
-                            execute!(stdout(), cursor::Hide).unwrap();
-
+                        for (i, frame) in spinner_frames.iter().enumerate() {
                             // Print the frame
-                            print!("{} ", frame);
-
-                            // Move to the very beginning of the line
-                            execute!(stdout(), cursor::MoveToColumn(0)).unwrap();
+                            //print!("{} ({:.2}ms)", frame, now.elapsed().as_secs_f32());
+                            *spinner_frame_c.lock().unwrap() = frame.clone();
                             tokio::time::sleep(std::time::Duration::from_millis(
                                 spinner_interval.into(),
                             ))
@@ -249,11 +293,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 // Enable cursor
                 execute!(stdout(), cursor::Show).unwrap();
-                execute!(stdout(), cursor::MoveLeft(2)).unwrap();
+
+                println!();
+
+                assert!(rainbow_task.await.unwrap_err().is_cancelled());
+                assert!(spin_task.await.unwrap_err().is_cancelled());
 
                 println!(
                     "{}: {}\n",
-                    "GPT-3".stylize().dark_green().bold(),
+                    config.app.response_prefix.clone().stylize().dark_green().bold(),
                     pretty_string
                 );
 
@@ -277,6 +325,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     #[cfg(windows)]
     disable_raw_mode()?;
+
+    config::save_config(config_dir.display().to_string().as_str(), &config).await?;
 
     Ok(())
 }
