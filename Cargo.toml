@@ -17,6 +17,8 @@ toml = "0.7.3"
 dialoguer = "0.10.3"
 directories = "5.0.0"
 console = "0.15.5"
-syntect = "5.0.0"
+syntect = { version = "5.0.0", features = ["metadata"] }
 regex = "1.7.3"
 rand = "0.8.5"
+serde_with = {version = "2.3.1", features = ["macros"]}
+chrono = "0.4.24"
