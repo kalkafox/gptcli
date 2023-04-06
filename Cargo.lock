@@ -487,6 +487,7 @@ dependencies = [
  "dialoguer",
  "directories",
  "openssl",
+ "os_info",
  "rand",
  "regex",
  "reqwest",
@@ -495,6 +496,7 @@ dependencies = [
  "serde_json",
  "serde_with",
  "syntect",
+ "sys-info",
  "tokio",
  "toml",
 ]
@@ -950,6 +952,17 @@ dependencies = [
  "openssl-src",
  "pkg-config",
  "vcpkg",
+]
+
+[[package]]
+name = "os_info"
+version = "3.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "006e42d5b888366f1880eda20371fedde764ed2213dc8496f49622fa0c99cd5e"
+dependencies = [
+ "log",
+ "serde",
+ "winapi",
 ]
 
 [[package]]
@@ -1473,6 +1486,16 @@ dependencies = [
  "thiserror",
  "walkdir",
  "yaml-rust",
+]
+
+[[package]]
+name = "sys-info"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0b3a0d0aba8bf96a0e1ddfdc352fc53b3df7f39318c71854910c3c4b024ae52c"
+dependencies = [
+ "cc",
+ "libc",
 ]
 
 [[package]]

@@ -3,7 +3,8 @@ mod spinners;
 
 use std::{
     collections::HashMap,
-    io::{stdout, Write},
+    fs::File,
+    io::{stdout, BufRead, BufReader, Write},
     panic,
     path::{self, Path},
     sync::{Arc, Mutex},
@@ -223,7 +224,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     println!("To clear the conversation history, type /clear");
-
     loop {
         let readline = rl.readline(">> ");
         match readline {
@@ -318,7 +318,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     config::save_config(&config_dir.display().to_string().as_str(), &config).await?;
 
-    if config.app.notify_save {
+    println!("Saved config!");
+
+    if config.app.save_conversation && !messages.is_empty() {
         let logs_dir = data_dir.join("logs");
         if !logs_dir.exists() {
             tokio::fs::create_dir_all(&logs_dir).await?;
@@ -333,7 +335,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut log_file = tokio::io::BufWriter::new(log_file);
 
         let messages_json = serde_json::to_string(&messages)?;
+
         log_file.write_all(messages_json.as_bytes()).await?;
+        // Ensure the data is written to disk
+        log_file.flush().await?;
 
         let mut log_file_content = String::new();
         for message in messages {
@@ -356,6 +361,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut log_file = tokio::io::BufWriter::new(log_file);
 
         log_file.write_all(log_file_content.as_bytes()).await?;
+        log_file.flush().await?;
     }
 
     Ok(())
@@ -514,14 +520,7 @@ async fn chat_completion(
             );
             execute!(stdout(), Clear(ClearType::UntilNewLine)).unwrap();
 
-            tokio::time::sleep(std::time::Duration::from_millis(
-                if u64::from(spinner_interval) < rainbow_delay {
-                    rainbow_delay
-                } else {
-                    spinner_interval.into()
-                },
-            ))
-            .await;
+            tokio::time::sleep(std::time::Duration::from_millis(rainbow_delay)).await;
 
             i = i + 1;
         }
