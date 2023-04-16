@@ -10,6 +10,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use config::Config;
 use rand::seq::SliceRandom;
 use spinners::{get_spinners, Spinner};
 use syntect::highlighting::{Style as HStyle, ThemeSet};
@@ -91,7 +92,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             tokio::fs::write(config_dir.join("config.toml"), toml::to_string(&config)?).await?;
             config
         } else {
-            toml::from_str(&tokio::fs::read_to_string(config_dir.join("config.toml")).await?)?
+            let res =
+                toml::from_str(&tokio::fs::read_to_string(config_dir.join("config.toml")).await?);
+            if let Err(e) = res {
+                println!("Error parsing config: {}", e);
+                let config = config::create_config(config_dir.to_str().unwrap()).await?;
+
+                // Move config.toml to config.toml.bak
+                tokio::fs::rename(
+                    config_dir.join("config.toml"),
+                    config_dir.join("config.toml.bak"),
+                )
+                .await?;
+                tokio::fs::write(config_dir.join("config.toml"), toml::to_string(&config)?).await?;
+                config
+            } else {
+                res?
+            }
         }
     };
 
@@ -373,6 +390,7 @@ fn highlight_message(
     ts: &syntect::highlighting::ThemeSet,
     code_re: &Regex,
     tiny_code_re: &Regex,
+    config: &Config,
 ) -> String {
     let mut message_mut = message.clone();
 
@@ -414,7 +432,7 @@ fn highlight_message(
 
         let syntax = syntax.unwrap();
 
-        let mut h = HighlightLines::new(syntax, &ts.themes["base16-mocha.dark"]);
+        let mut h = HighlightLines::new(syntax, &ts.themes[config.app.syntax_theme.as_str()]);
 
         let mut code: Vec<String> = vec![];
         for line in LinesWithEndings::from(&cap["code"]) {
@@ -595,7 +613,8 @@ async fn chat_completion(
         format!("{})", get_time_suffix(&now.elapsed()))
     );
 
-    let pretty_string = highlight_message(&message.content, &ps, &ts, &code_re, &tiny_code_re);
+    let pretty_string =
+        highlight_message(&message.content, &ps, &ts, &code_re, &tiny_code_re, config);
 
     println!("\n");
 

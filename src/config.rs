@@ -31,6 +31,7 @@ pub struct AppConfig {
     pub response_prefix: String,
     pub rainbow_delay: u64,
     pub save_conversation: bool,
+    pub syntax_theme: String,
 }
 
 pub async fn save_config(
@@ -64,6 +65,7 @@ pub async fn create_config(config_dir: &str) -> Result<Config, Box<dyn std::erro
             response_prefix: "GPT-3".to_string(),
             rainbow_delay: 100,
             save_conversation: false,
+            syntax_theme: "base16-ocean.dark".to_string(),
         },
     };
     save_config(config_dir, &config).await?;
