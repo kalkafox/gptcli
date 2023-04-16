@@ -4,20 +4,22 @@ gptcli is a command line interface built with Rust that currently offers syntax 
 
 ## Installation
 
-To install gptcli, you'll need to have Rust installed on your system. Once you have Rust set up, you can install gptcli by running the following command:
+To install gptcli, you'll need to have Rust installed on your system. Once you have Rust set up, you can clone and setup gptcli by running the following command:
 
 ```sh
-cargo install gptcli
+git clone https://github.com/kalkafox/gptcli.git
+cd gptcli
+cargo build --release
 ```
 
 This should automatically download and install gptcli on your system.
 
 ## Usage
 
-To use gptcli, simply run the following command:
+To use gptcli after building it, simply run the following command:
 
 ```sh
-gptcli
+./target/release/gptcli
 ```
 
 This will start the client in the default configuration.
@@ -25,14 +27,14 @@ This will start the client in the default configuration.
 To use gptcli with a prompt, run the following command:
 
 ```sh
-gptcli 'How far away is Andromeda?'
+./target/release/gptcli 'How far away is Andromeda?'
 ```
 
 This will initialize gptcli with the specified prompt.
 
 ## Configuration
 
-To configure gptcli, you can create a `config.toml` file in the same directory as the `gptcli` binary. The `config.toml` file should contain settings in the following format:
+To configure gptcli, you can create a `config.toml` file in the same directory as the `gptcli` repository. The `config.toml` file should contain settings in the following format:
 
 ```toml
 [openai]
