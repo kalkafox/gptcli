@@ -2,15 +2,13 @@
 
 gptcli is a command line interface built with Rust that currently offers syntax highlighting, configurable settings, color support, and message history. It offers a user-friendly way to interact with [OpenAI's GPT-3 API](https://openai.com) (and hopefully, GPT-4 aswell!)
 
-## Releases
-
-You can download the latest release of gptcli from the [GitHub releases page](https://github.com/kalkafox/gptcli/releases).
-
 ## Installation
 
 To install gptcli, you'll need to have Rust installed on your system. Once you have Rust set up, you can install gptcli by running the following command:
 
+```sh
 cargo install gptcli
+```
 
 This should automatically download and install gptcli on your system.
 
@@ -18,13 +16,17 @@ This should automatically download and install gptcli on your system.
 
 To use gptcli, simply run the following command:
 
-`gptcli`
+```sh
+gptcli
+```
 
 This will start the client in the default configuration.
 
 To use gptcli with a prompt, run the following command:
 
-`gptcli 'How far away is Andromeda?'`
+```sh
+gptcli 'How far away is Andromeda?'
+```
 
 This will initialize gptcli with the specified prompt.
 
@@ -32,7 +34,7 @@ This will initialize gptcli with the specified prompt.
 
 To configure gptcli, you can create a `config.toml` file in the same directory as the `gptcli` binary. The `config.toml` file should contain settings in the following format:
 
-````toml
+```toml
 [openai]
 model = "gpt-3.5-turbo"
 temperature = 1.0
@@ -52,7 +54,7 @@ notify_save = true
 response_prefix = "GPT-3"
 rainbow_delay = 100
 save_conversation = true
-````
+```
 
 Here's a brief description of each setting:
 
