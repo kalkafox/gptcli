@@ -5,9 +5,6 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[lib]
-crate-type = ["cdylib"]
-
 [dependencies]
 openssl = { version = "0.10.49", features = ["vendored"] }
 rustyline = "11.0.0"
