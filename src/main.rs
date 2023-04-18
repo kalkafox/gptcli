@@ -21,7 +21,7 @@ use syntect::{dumps::from_uncompressed_data, easy::HighlightLines};
 use crossterm::{
     cursor, execute,
     style::{self, Color, Stylize},
-    terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType},
+    terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType, self},
 };
 
 use directories::ProjectDirs;
@@ -200,6 +200,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let data_dir_c = data_dir.clone();
 
+    ctrlc::set_handler(move || {
+        disable_raw_mode().unwrap();
+        execute!(stdout(), cursor::Show).unwrap();
+        execute!(stdout(), style::ResetColor).unwrap();
+        execute!(stdout(), cursor::MoveToColumn(0)).unwrap();
+        execute!(stdout(), Clear(ClearType::CurrentLine)).unwrap();
+        execute!(stdout(), style::ResetColor).unwrap();
+        std::process::exit(0);
+    })?;
+
     panic::set_hook(Box::new(move |panic_info| {
         let mut file = std::fs::File::create(data_dir_c.join("panic.log")).unwrap();
         writeln!(file, "{:?}", panic_info).unwrap();
@@ -317,6 +327,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Err(ReadlineError::Interrupted) => {
                 println!();
                 println!("Buh-bye!");
+                disable_raw_mode().unwrap();
+                execute!(stdout(), cursor::Show).unwrap();
+                execute!(stdout(), cursor::MoveToColumn(0)).unwrap();
+                execute!(stdout(), style::ResetColor).unwrap();
+                execute!(stdout(), Clear(ClearType::CurrentLine)).unwrap();
                 break;
             }
             Err(ReadlineError::Eof) => {
@@ -618,10 +633,13 @@ async fn chat_completion(
 
     println!("\n");
 
+    let terminal_width = terminal::size().unwrap().0 as usize;
+
     println!(
         "{}: {}\n",
         config.app.response_prefix.clone().dark_green().bold(),
-        pretty_string
+        textwrap::wrap(&pretty_string, terminal_width)
+            .join("\n")
     );
 
     execute!(stdout(), cursor::Show).unwrap();
